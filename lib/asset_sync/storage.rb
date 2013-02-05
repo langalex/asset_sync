@@ -149,6 +149,7 @@ module AssetSync
 
     def gzip_file(path, f)
       file = Tempfile.new('gz')
+      file.binmode
       begin
         gz = Zlib::GzipWriter.new(file)
         gz.write IO.binread("#{path}/#{f}")
@@ -156,7 +157,7 @@ module AssetSync
       ensure
         file.close
       end
-      "#{path}/#{file.path}"
+      file.path
     end
 
     def use_gzipped(path, f, gzipped, file)
