@@ -125,21 +125,10 @@ module AssetSync
         log "Ignoring: #{f}"
         ignore = true
       elsif config.gzip? && File.exists?(gzipped)
-        original_size = File.size("#{path}/#{f}")
-        gzipped_size  = File.size(gzipped)
-
-        if gzipped_size < original_size
-          percentage = ((gzipped_size.to_f/original_size.to_f)*100).round(2)
-          file.merge!({
-            :key => f,
-            :body => File.open(gzipped),
-            :content_encoding => 'gzip'
-          })
-          log "Uploading: #{gzipped} in place of #{f} saving #{percentage}%"
-        else
-          percentage = ((original_size.to_f/gzipped_size.to_f)*100).round(2)
-          log "Uploading: #{f} instead of #{gzipped} (compression increases this file by #{percentage}%)"
-        end
+        use_gzipped path, f, gzipped, file
+      elsif config.gzip?
+        gzipped = gzip_file(path, f)
+        use_gzipped path, f, gzipped, file
       else
         if !config.gzip? && File.extname(f) == ".gz"
           # set content encoding for gzipped files this allows cloudfront to properly handle requests with Accept-Encoding
@@ -156,6 +145,36 @@ module AssetSync
       end
 
       file = bucket.files.create( file ) unless ignore
+    end
+
+    def gzip_file(path, f)
+      file = Tempfile.new('gz')
+      begin
+        gz = Zlib::GzipWriter.new(file)
+        gz.write IO.binread("#{path}/#{f}")
+        gz.close
+      ensure
+        file.close
+      end
+      "#{path}/#{file.path}"
+    end
+
+    def use_gzipped(path, f, gzipped, file)
+      original_size = File.size("#{path}/#{f}")
+      gzipped_size  = File.size(gzipped)
+
+      if gzipped_size < original_size
+        percentage = ((gzipped_size.to_f/original_size.to_f)*100).round(2)
+        file.merge!({
+          :key => f,
+          :body => File.open(gzipped),
+          :content_encoding => 'gzip'
+        })
+        log "Uploading: #{gzipped} in place of #{f} saving #{percentage}%"
+      else
+        percentage = ((original_size.to_f/gzipped_size.to_f)*100).round(2)
+        log "Uploading: #{f} instead of #{gzipped} (compression increases this file by #{percentage}%)"
+      end
     end
 
     def upload_files
